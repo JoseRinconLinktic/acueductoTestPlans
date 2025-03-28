@@ -1,13 +1,14 @@
+//Version 28/03/2025
 var personalAccessToken = "AOJJZijWT6k27LMzQk3oZXdJvjfpOV8zHngfMpxy2CAEzQCnFW6IJQQJ99BBACAAAAAL75KlAAASAZDO2F4l";
 var sheets_url = "https://docs.google.com/spreadsheets/d/1JvZmEcFZjWtah81L_AHPsGUpYUgBSVq4dh891NN1sl0/edit?gid=0#gid=0";
 //var personalAccessToken = "A9pcpSOWQ5G8znF9u80WmJNb38kQeP8y2A4mwQ2TxTL7XwowveIvJQQJ99BCACAAAAAL75KlAAASAZDO4cT8";
-var page_name = "Transv y Corresp"; //Aqui se le pone nombre a la hoja
+var page_name = "CORR Y TRAV"; //Aqui se le pone nombre a la hoja
 var data_sheets = SpreadsheetApp.openByUrl(sheets_url);
 var page = data_sheets.getSheetByName(page_name);
 
 var suite_consultar;
 
-var suites_consultar = [199036,199019,200056,200054,200103,200101]; //Aqui se crean los archivos
+var suites_consultar = [199036,200056, 200103,199019, 200054,200101]; //Aqui se crean los archivos
 
 function crear_varios(){
   for(i=0;i<suites_consultar.length;i++){
@@ -15,6 +16,7 @@ function crear_varios(){
     Logger.log(`Consultando ${suite_consultar}...`);
     obtener_test_plans()
   }
+  escribirEnHoja();
 }
 
 if (page) {
@@ -37,13 +39,14 @@ var nuevos_encabezados = [
   "Nombre Test Case", 
   "Estado Test Case", 
   "Fecha de modificación Estado Test Case",
+  "Caso Corrido por",
   "URL de Test Case"
 ];
 page.getRange(1, 1, 1, nuevos_encabezados.length).setValues([nuevos_encabezados]);
 
 function solicitud_https(url) {
   var maxRetries = 5; // Número máximo de reintentos
-  var retryDelay = 2000; // Tiempo de espera entre reintentos en milisegundos
+  var retryDelay = 100; // Tiempo de espera entre reintentos en milisegundos
   var attempts = 0;
   var response;
 
@@ -148,14 +151,22 @@ function obtener_test_cases(plan_id, plan_title, plan_url,suite_id,suite_title,s
     var case_id = cases.testCase.id;
     var case_url = `https://dev.azure.com/Linktic/4fe5ab76-a2ad-4a1f-aeea-6f9ab718b878/_workitems/edit/${case_id}`;
     var case_outcome = cases.outcome;
+    var run_id = cases.lastTestRun["id"];
+    var run_by = cases.lastResultDetails.runBy["displayName"];
 
-    //var url_wi = `https://dev.azure.com/Linktic/384%20-%20CORE%20FIDUPREVISORA/_apis/wit/workitems/${case_id}?apri-version=7.1-preview`;
-    var url_wi = `https://dev.azure.com/Linktic/348%20-%20SGDEA%20ACUEDUCTO/_apis/wit/workitems/${case_id}?apri-version=7.1-preview`;
+    //var url_wi = `https://dev.azure.com/Linktic/384%20-%20CORE%20FIDUPREVISORA/_apis/wit/workitems/${case_id}?api-version=7.1-preview`;
+    var url_wi = `https://dev.azure.com/Linktic/348%20-%20SGDEA%20ACUEDUCTO/_apis/wit/workitems/${case_id}?api-version=5.0`;
+
+    var url_run = `https://dev.azure.com/Linktic/348%20-%20SGDEA%20ACUEDUCTO/_apis/test/runs/${run_id}/results?api-version=5.0`;
 
     var case_wi = solicitud_https(url_wi);
 
-    var case_timestamp = case_wi.fields['Microsoft.VSTS.Common.StateChangeDate'];
-
+    if(run_id == 0){
+      var case_timestamp = case_wi.fields['Microsoft.VSTS.Common.StateChangeDate'];
+    }else{
+      var case_run = solicitud_https(url_run);
+      var case_timestamp = case_run.value[0].completedDate;
+    }
     var case_title =  case_wi.fields['System.Title'];
 
     var dateObj = new Date(case_timestamp);
@@ -176,6 +187,7 @@ function obtener_test_cases(plan_id, plan_title, plan_url,suite_id,suite_title,s
     datos.case_url = case_url;
     datos.timestamp = formattedDate;
     datos.case_title = case_title;
+    datos.run_by = run_by;
     subir_sheets(datos);
   }
 }
@@ -200,6 +212,7 @@ function subir_sheets(datos) {
         datos.case_title,
         datos.case_outcome,
         datos.timestamp,
+        datos.run_by,
         datos.case_url
       ];
 
@@ -226,3 +239,16 @@ function subir_sheets(datos) {
   }
 }
 
+function escribirEnHoja() {
+  page.getRange("K3").setValue("Fecha de ultima actualización");
+  
+  // Obtener la fecha de ejecución actual
+  var fechaHora = new Date();
+  var options = { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+  var formattedDate = fechaHora.toLocaleDateString('es-CO', options); // Formato en español
+  
+  // Escribir la fecha de ejecución en la celda K4
+  page.getRange("K4").setValue(formattedDate);
+  
+  Logger.log("Fecha de última actualización guardada en la celda K4.");
+}
